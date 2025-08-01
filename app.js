@@ -50,8 +50,16 @@ Project.init(); // <- Add this line
 Content.init();
 initializeDatabase().then(() => {
     const PORT = process.env.PORT || 5000;
+
+    const HEROKU_APP_NAME = process.env.SERVER_URL; // 👈 your Heroku app name
+
     app.listen(PORT, () => {
-        console.log(`✅ Server running on http://localhost:${PORT}`);
+        const isProd = process.env.NODE_ENV === 'production';
+        const baseURL = isProd
+            ? `https://${HEROKU_APP_NAME}.herokuapp.com`
+            : `http://localhost:${PORT}`;
+
+        console.log(`✅ Server running on ${baseURL}`);
     });
 }).catch(err => {
     console.error("❌ Failed to initialize DB:", err.message);
