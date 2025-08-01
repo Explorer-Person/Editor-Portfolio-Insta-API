@@ -1,0 +1,8 @@
+node_modules/
+public/
+.env
+controller/video-urls.json
+controller/urls.json
+controller/media.json
+controller/test.js
+controller/rendered.html

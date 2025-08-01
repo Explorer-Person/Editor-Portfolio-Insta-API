@@ -1,0 +1,7 @@
+{
+    "ignore": [
+        "*.json",
+        "video-urls.json",
+        "urls.json"
+    ]
+}
