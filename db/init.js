@@ -6,9 +6,10 @@ const dbName = process.env.DB_NAME;
 async function initializeDatabase() {
     // Step 1: Connect without a specific database
     const connection = await mysql.createConnection({
-        host: process.env.DB_HOST,
+        host: process.env.DB_HOST, 
         user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD
+        password: process.env.DB_PASSWORD,
+        port: process.env.DB_PORT
     });
 
     // Step 2: Create the database if it doesn't exist
