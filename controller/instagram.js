@@ -354,9 +354,9 @@ const instaTakeContents = async () => {
 
 exports.InstaContentSaver = async (req, res, next) => {
     try {
-        // const contents = await instaTakeContents();
-        const raw = fs.readFileSync(path.join(__dirname, 'video-urls.json'), 'utf-8');
-        const contents = JSON.parse(raw);
+        const contents = await instaTakeContents();
+        // const raw = fs.readFileSync(path.join(__dirname, 'video-urls.json'), 'utf-8');
+        // const contents = JSON.parse(raw);
         let resArr = [];
         console.log(contents, typeof contents)
         for (let i = 0; i < contents.length; i++) {
