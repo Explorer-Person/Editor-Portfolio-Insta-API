@@ -8,7 +8,13 @@ node_modules/
 screenshots/
 __tests__/
 tests/
-uploads/
+upload/
 *.zip
-public/uploads/
-public/projects/
+public/upload/
+public/project/
+.env
+controller/video-urls.json
+controller/urls.json
+controller/media.json
+controller/test.js
+controller/rendered.html
