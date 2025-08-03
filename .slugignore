@@ -1,0 +1,14 @@
+.cache/
+*.log
+*.png
+*.jpg
+*.jpeg
+*.mp4
+node_modules/
+screenshots/
+__tests__/
+tests/
+uploads/
+*.zip
+public/uploads/
+public/projects/

@@ -134,7 +134,7 @@ function getVencodeTagFromUrl(url) {
         const decoded = JSON.parse(Buffer.from(decodeURIComponent(efgMatch[1]), 'base64').toString());
         return decoded.vencode_tag || null;
     } catch (err) {
-        console.warn('❌ Failed to parse vencode_tag for URL:', url);
+        console.warn('❌ Failed to parse vencode_tag for URL:', url, err);
         return null;
     }
 }
@@ -148,7 +148,7 @@ const instaTakeContents = async () => {
     try {
         browser = await puppeteerExtra.launch({
             headless: true,
-            executablePath: process.env.CHROME_BIN || puppeteer.executablePath(),
+            executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
 
