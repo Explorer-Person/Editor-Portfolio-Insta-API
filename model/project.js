@@ -2,8 +2,9 @@
 const db = require('../db/db');
 const fs = require('fs');
 const path = require('path');
+const cloudinary = require('cloudinary').v2;
 
-const uploadsDir = path.join(__dirname, '../public/upload');
+const uploadsDir = path.join(__dirname, '../public/upload/project');
 
 const Project = {
     init: async () => {
@@ -54,73 +55,105 @@ const Project = {
         return rows[0];
     },
 
-    updateById: async (id, { title, description, mainImage, imageFiles, videoFiles, hashtags, githubLink }) => {
-        console.log(id, title, description, mainImage, imageFiles, videoFiles, hashtags, githubLink);
-
-
-        const existing = await Project.findById(id);
+    updateById: async (
+        id,
+        {
+            title,
+            description,
+            mainImage,
+            imageFiles,
+            videoFiles,
+            hashtags,
+            githubLink
+        }
+    ) => {
+        const parsedId = parseInt(id);
+        const existing = await Project.findById(parsedId);
         if (!existing) throw new Error(`Project with ID ${parsedId} not found`);
 
-        // Extract and normalize
-        const oldImages = JSON.parse(existing.imageFiles);
-        const oldVideos = JSON.parse(existing.videoFiles);
+        // 🧠 Extract Cloudinary public_id from a full URL
+        const extractPublicId = (cloudinaryUrl) => {
+            if (typeof cloudinaryUrl !== 'string') return null;
+            const match = cloudinaryUrl.match(/\/upload\/(?:v\d+\/)?([^\.]+)(?:\.\w+)?$/);
+            return match ? match[1] : null;
+        };
+
+        // 🧾 Parse old values from DB
+        const oldImages = JSON.parse(existing.imageFiles || '[]');
+        const oldVideos = JSON.parse(existing.videoFiles || '[]');
         const oldMainImage = existing.mainImage;
-        const newImages = imageFiles;
-        const newVideos = videoFiles;
+
+        // 🆕 Parse new values from update payload
+        const newImages = Array.isArray(imageFiles) ? imageFiles : JSON.parse(imageFiles || '[]');
+        const newVideos = Array.isArray(videoFiles) ? videoFiles : JSON.parse(videoFiles || '[]');
         const newMainImage = mainImage;
 
-        console.log('Old images:', oldImages);
-        console.log('New images:', newImages);
-        console.log('Old videos:', oldVideos);
-        console.log('New videos:', newVideos);
+        // 🆔 Extract public IDs
+        const oldImageIds = oldImages.map(extractPublicId).filter(Boolean);
+        const newImageIds = newImages.map(extractPublicId).filter(Boolean);
+        const oldVideoIds = oldVideos.map(extractPublicId).filter(Boolean);
+        const newVideoIds = newVideos.map(extractPublicId).filter(Boolean);
 
-        if(oldImages.length > newImages.length) {
-            const result = await oldImages.filter(img => !newImages.includes(img));
-            console.log('Images to delete:', result);
-            result.forEach(file => {
-                const imgPath = path.join(uploadsDir, 'imageFiles', file);
-                if (fs.existsSync(imgPath)) {
-                    fs.unlinkSync(imgPath);
-                    console.log(`🗑️ Deleted image: ${file}`);
+        // 🧹 Delete removed images from Cloudinary
+        const imageIdsToDelete = oldImageIds.filter(id => !newImageIds.includes(id));
+        await Promise.all(imageIdsToDelete.map(async (publicId) => {
+            if (publicId?.startsWith('project-images/')) {
+                try {
+                    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+                    console.log(`🧹 Deleted old image from Cloudinary: ${publicId}`, result);
+                } catch (err) {
+                    console.error(`❌ Failed to delete image ${publicId}:`, err.message);
                 }
-            });
-        }
-        if(oldVideos.length > newVideos.length) {
-            const result = await oldVideos.filter(vid => !newVideos.includes(vid));
-            console.log('Videos to delete:', result);
-            result.forEach(file => {
-                const vidPath = path.join(uploadsDir, 'videoFiles', file);
-                if (fs.existsSync(vidPath)) {
-                    fs.unlinkSync(vidPath);
-                    console.log(`🗑️ Deleted video: ${file}`);
+            }
+        }));
+
+        // 🧹 Delete removed videos from Cloudinary
+        const videoIdsToDelete = oldVideoIds.filter(id => !newVideoIds.includes(id));
+        await Promise.all(videoIdsToDelete.map(async (publicId) => {
+            if (publicId?.startsWith('project-videos/')) {
+                try {
+                    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+                    console.log(`🧹 Deleted old video from Cloudinary: ${publicId}`, result);
+                } catch (err) {
+                    console.error(`❌ Failed to delete video ${publicId}:`, err.message);
                 }
-            });
-        }
-        if(oldMainImage && oldMainImage !== newMainImage) {
-            const mainImgPath = path.join(uploadsDir, 'mainImage', oldMainImage);
-            if (fs.existsSync(mainImgPath)) {
-                fs.unlinkSync(mainImgPath);
-                console.log(`🗑️ Deleted main image: ${oldMainImage}`);
+            }
+        }));
+
+        // 🧹 Delete replaced main image from Cloudinary
+        const mainImageChanged = oldMainImage && oldMainImage !== newMainImage;
+        if (mainImageChanged && oldMainImage.startsWith('http')) {
+            const publicId = extractPublicId(oldMainImage);
+            if (publicId?.startsWith('project-main/')) {
+                try {
+                    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+                    console.log(`🗑️ Deleted old main image from Cloudinary: ${publicId}`, result);
+                } catch (err) {
+                    console.error(`❌ Failed to delete main image ${publicId}:`, err.message);
+                }
             }
         }
 
-        
-
-        // 📝 Final update to database
+        // 💾 Update database
         const [result] = await db.execute(
             `UPDATE projects SET 
-            title = ?, description = ?, mainImage = ?, imageFiles = ?, 
-            videoFiles = ?, hashtags = ?, githubLink = ? 
-            WHERE id = ?`,
+        title = ?, 
+        description = ?, 
+        mainImage = ?, 
+        imageFiles = ?, 
+        videoFiles = ?, 
+        hashtags = ?, 
+        githubLink = ? 
+        WHERE id = ?`,
             [
                 title ?? null,
                 description ?? null,
-                mainImage,
-                imageFiles,
-                videoFiles,
+                newMainImage ?? null,
+                JSON.stringify(newImages),
+                JSON.stringify(newVideos),
                 hashtags ?? null,
                 githubLink ?? null,
-                id
+                parsedId
             ]
         );
 
@@ -134,6 +167,16 @@ const Project = {
 
         let imageFiles = [];
         let videoFiles = [];
+        const mainImage = existing.mainImage;
+
+        const extractPublicId = (cloudinaryUrl) => {
+            if (typeof cloudinaryUrl !== 'string') return null;
+
+            // Example URL:
+            // https://res.cloudinary.com/doo1czuto/image/upload/v1234567890/project-images/my-image_name123.png
+            const match = cloudinaryUrl.match(/\/upload\/(?:v\d+\/)?([^\.]+)(?:\.\w+)?$/);
+            return match ? match[1] : null;
+        };
 
         try {
             imageFiles = JSON.parse(existing.imageFiles || '[]');
@@ -142,51 +185,43 @@ const Project = {
             console.error('❌ Failed to parse media JSON:', err);
         }
 
-        // Add main image if exists
-        const mainImage = existing.mainImage;
-        if (mainImage && !imageFiles.includes(mainImage)) {
-            imageFiles.push(mainImage);
+        // 🔁 Combine all media URLs
+        const allImages = [...imageFiles];
+        if (mainImage && !allImages.includes(mainImage)) {
+            allImages.push(mainImage);
         }
 
-        imageFiles.forEach(file => {
-            if (typeof file === 'string' && file.trim() !== '') {
-                const imgPath = path.join(uploadsDir, 'imageFiles', file);
-                if (fs.existsSync(imgPath)) {
-                    fs.unlink(imgPath, err => {
-                        if (err) console.error(`❌ Failed to delete image ${file}:`, err.message);
-                        else console.log(`🗑️ Deleted image: ${file}`);
-                    });
+        // ✅ Cloudinary deletion: images
+        await Promise.all(allImages.map(async (url) => {
+            const publicId = extractPublicId(url);
+            if (publicId?.startsWith('project-images/') || publicId?.startsWith('project-main/')) {
+                try {
+                    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+                    console.log(`🧹 Deleted Cloudinary image: ${publicId}`, result);
+                } catch (err) {
+                    console.error(`❌ Cloudinary image deletion failed: ${publicId}`, err.message);
                 }
             }
-        });
+        }));
 
-        // Delete video files
-        videoFiles.forEach(file => {
-            if (typeof file === 'string' && file.trim() !== '') {
-                const vidPath = path.join(uploadsDir, 'videoFiles', file);
-                if (fs.existsSync(vidPath)) {
-                    fs.unlink(vidPath, err => {
-                        if (err) console.error(`❌ Failed to delete video ${file}:`, err.message);
-                        else console.log(`🗑️ Deleted video: ${file}`);
-                    });
+        // ✅ Cloudinary deletion: videos
+        await Promise.all(videoFiles.map(async (url) => {
+            const publicId = extractPublicId(url);
+            if (publicId?.startsWith('project-videos/')) {
+                try {
+                    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+                    console.log(`🧹 Deleted Cloudinary video: ${publicId}`, result);
+                } catch (err) {
+                    console.error(`❌ Cloudinary video deletion failed: ${publicId}`, err.message);
                 }
             }
-        });
+        }));
 
-        if (typeof mainImage === 'string' && mainImage.trim() !== '') {
-            const vidPath = path.join(uploadsDir, 'mainImage', mainImage);
-            if (fs.existsSync(vidPath)) {
-                fs.unlink(vidPath, err => {
-                    if (err) console.error(`❌ Failed to delete video ${mainImage}:`, err.message);
-                    else console.log(`🗑️ Deleted video: ${mainImage}`);
-                });
-            }
-        }
 
-        // Delete DB row
+        // 🧾 Delete DB row
         const [result] = await db.execute(`DELETE FROM projects WHERE id = ?`, [id]);
         return result.affectedRows > 0;
-    },
+    }
 
 };
 

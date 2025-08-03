@@ -2,6 +2,7 @@
 const db = require('../db/db');
 const fs = require('fs');
 const path = require('path');
+const cloudinary = require('cloudinary').v2;
 
 const Blog = {
     init: async () => {
@@ -36,35 +37,39 @@ const Blog = {
         return rows;
     },
 
-    findBySlug: async (slug) => {
-        const [rows] = await db.execute(`SELECT * FROM blogs WHERE slug = ? LIMIT 1`, [slug]);
-        return rows[0];
-    },
-
     findById: async (id) => {
         const [rows] = await db.execute(`SELECT * FROM blogs WHERE id = ? LIMIT 1`, [id]);
         return rows[0];
     },
 
+    findBySlug: async (slug) => {
+        const [rows] = await db.execute(`SELECT * FROM blogs WHERE slug = ? LIMIT 1`, [slug]);
+        return rows[0];
+    },
+
     updateById: async (id, { title, slug, image, excerpt, date, content, imageNames, jsonModel }) => {
         const parsedId = parseInt(id);
-        const uploadsDir = path.join(__dirname, '../public/upload');
+        console.log("🛠️ Updating blog with ID:", parsedId);
 
-        console.log("Updating blog with ID:", parsedId);
+        const extractPublicId = (fullPath) => {
+            // Example: fullPath = "v1754137968/blog-covers/xyz.jpg"
+            const match = fullPath.match(/\/upload\/(?:v\d+\/)?(.+?)$/);
+            return match ? match[1].replace(/\.[a-zA-Z]+$/, '') : null;
+        };
 
         const res = await Blog.findById(parsedId);
         if (!res) {
             throw new Error(`Blog with ID ${parsedId} not found`);
         }
 
-        // Parse both imageNames arrays
+        // Step 1: Parse image name arrays
         let oldImageNames = [];
         let newImageNames = [];
+
         try {
             oldImageNames = JSON.parse(res.imageNames) || [];
         } catch (err) {
             console.error('❌ Failed to parse old imageNames:', err);
-            throw new Error('Invalid old imageNames format');
         }
 
         try {
@@ -73,92 +78,115 @@ const Blog = {
             console.error('❌ Failed to parse new imageNames:', err);
         }
 
-        // Include the cover image itself (without prefix)
-        const oldCoverImage = res.image?.split('/upload/')[1];
-        const newCoverImage = image?.split('/upload/')[1];
+        // Step 2: Detect changed cover image
+        const oldCover = res.image?.split('/upload/')[1]; // e.g., blog-covers/xxx
+        const newCover = image?.split('/upload/')[1];
 
-        console.log('Old image names:', oldImageNames);
-        console.log('New image names:', newImageNames);
-
-        if (oldCoverImage) oldImageNames.push(oldCoverImage);
-        if (newCoverImage) newImageNames.push(newCoverImage);
-
-        // Get images to delete: in old but not in new
-        const toDelete = oldImageNames.filter(img => !newImageNames.includes(img));
-        console.log('🧹 Deleting unused images:', toDelete);
-
-        // Delete images from disk
-        toDelete.forEach(filename => {
-            const filePath = path.join(uploadsDir, filename);
-            if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, err => {
-                    if (err) {
-                        console.error(`❌ Failed to delete ${filename}:`, err.message);
-                    } else {
-                        console.log(`✅ Deleted unused image: ${filename}`);
-                    }
-                });
+        const coverImageChanged = oldCover && oldCover !== newCover;
+        if (coverImageChanged) {
+            try {
+                const publicId = extractPublicId(res.image); // remove extension
+                const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+                console.log(`🗑️ Deleted old cover image: ${publicId}`, result);
+            } catch (err) {
+                console.error('❌ Failed to delete old cover image:', err.message);
             }
-        });
+        }
 
-        // Proceed to update the DB
+        // Step 3: Detect unused blog content images
+        const toDelete = oldImageNames.filter(oldImg => !newImageNames.includes(oldImg));
+        console.log('🧹 Content images to delete:', toDelete);
+
+        const deleteFromCloudinary = async (publicPath) => {
+            const publicId = extractPublicId(publicPath); // strip file extension
+            console.log("need to deletion,,,", publicId)
+
+            if (!publicId) return;
+
+            try {
+                const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+                console.log(`✅ Deleted from Cloudinary: ${publicId}`, result);
+            } catch (err) {
+                console.error(`❌ Error deleting ${publicId}:`, err.message);
+            }
+        };
+
+        await Promise.all(toDelete.map(deleteFromCloudinary));
+
+        const formatDate = (isoString) => {
+            if (!isoString || typeof isoString !== 'string') return null;
+            return isoString.split('T')[0]; // returns only YYYY-MM-DD
+        };
+
+        const formattedDate = formatDate(date);
+
+        // Step 4: Proceed to DB update
         const [result] = await db.execute(
             `UPDATE blogs
-            SET title = ?, slug = ?, image = ?, excerpt = ?, date = ?, content = ?, imageNames = ?, jsonModel = ?
-            WHERE id = ?`,
-            [title, slug, image, excerpt, date, content, imageNames, jsonModel, parsedId]
+                SET title = ?, slug = ?, image = ?, excerpt = ?, date = ?, content = ?, imageNames = ?, jsonModel = ?
+                WHERE id = ?`,
+            [title, slug, image, excerpt, formattedDate, content, imageNames, jsonModel, parsedId]
         );
 
         return result.affectedRows > 0;
     },
 
-    deleteBySlug: async (slug) => {
-        // First, fetch the blog to access image info
-        const [rows] = await db.execute(`SELECT image, imageNames FROM blogs WHERE slug = ? LIMIT 1`, [slug]);
+
+
+    deleteById: async (id) => {
+        const extractCloudinaryPublicId = (cloudinaryPath) => {
+            const match = cloudinaryPath.match(/\/upload\/(?:v\d+\/)?(.+?)$/);
+            if (!match) return null;
+            const pathWithoutExt = match[1].replace(/\.[a-zA-Z]+$/, ''); // remove file extension
+            return pathWithoutExt; // e.g. blog-images/filename
+        };
+        const [rows] = await db.execute(
+            `SELECT image, imageNames FROM blogs WHERE id = ? LIMIT 1`,
+            [id]
+        );
         const blog = rows[0];
         if (!blog) return false;
 
-        const uploadsDir = path.join(__dirname, '../public/uploads');
+        // 🔍 1. Collect all Cloudinary public_ids to delete
+        let cloudinaryIdsToDelete = [];
 
-        // Collect all image file names
-        let filesToDelete = [];
-
-        // Add from imageNames array
         if (blog.imageNames) {
             try {
                 const parsed = JSON.parse(blog.imageNames);
                 if (Array.isArray(parsed)) {
-                    filesToDelete.push(...parsed);
+                    for (const imgPath of parsed) {
+                        const publicId = extractCloudinaryPublicId(imgPath);
+                        if (publicId) cloudinaryIdsToDelete.push(publicId);
+                    }
                 }
             } catch (err) {
                 console.error('❌ Failed to parse imageNames JSON:', err);
             }
         }
 
-        // Add the cover image if not already in list
         if (blog.image) {
-            const coverFile = blog.image.split('/upload/')[1];
-            if (coverFile && !filesToDelete.includes(coverFile)) {
-                filesToDelete.push(coverFile);
+            const publicId = extractCloudinaryPublicId(blog.image);
+            if (publicId && !cloudinaryIdsToDelete.includes(publicId)) {
+                cloudinaryIdsToDelete.push(publicId);
             }
         }
 
-        // Delete image files from disk
-        filesToDelete.forEach(filename => {
-            const filePath = path.join(uploadsDir, filename);
-            if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, err => {
-                    if (err) {
-                        console.error(`❌ Error deleting ${filename}:`, err.message);
-                    } else {
-                        console.log(`🗑️ Deleted file: ${filename}`);
-                    }
-                });
+        // 🧹 2. Delete from Cloudinary
+        for (const publicId of cloudinaryIdsToDelete) {
+            try {
+                const result = await uploader.destroy(publicId);
+                console.log(`🗑️ Deleted from Cloudinary: ${publicId}`, result);
+            } catch (err) {
+                console.error(`❌ Cloudinary deletion failed for ${publicId}:`, err.message);
             }
-        });
+        }
 
-        // Finally, delete the blog row from the database
-        const [result] = await db.execute(`DELETE FROM blogs WHERE slug = ?`, [slug]);
+        // 🗑️ 3. Delete blog from DB
+        const [result] = await db.execute(
+            `DELETE FROM blogs WHERE id = ?`,
+            [id]
+        );
+
         return result.affectedRows > 0;
     }
 };
