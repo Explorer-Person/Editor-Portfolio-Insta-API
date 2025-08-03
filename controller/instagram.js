@@ -23,7 +23,7 @@
 
 const Content = require('../model/content');
 const puppeteerExtra = require('puppeteer-extra');
-const puppeteer = require('puppeteer')
+const puppeteer = require('puppeteer-core');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs');
 const path = require('path');
