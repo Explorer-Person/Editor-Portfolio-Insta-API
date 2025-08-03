@@ -21,15 +21,14 @@
 
 // main();
 
-const Content = require('../model/content')
-const puppeteer = require('puppeteer');
+const Content = require('../model/content');
+const chromium = require('chrome-aws-lambda');
 const puppeteerExtra = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs');
 const path = require('path');
 
 
-puppeteerExtra.puppeteer = puppeteer;
 
 puppeteerExtra.use(StealthPlugin());
 
@@ -150,13 +149,8 @@ const instaTakeContents = async () => {
         browser = await puppeteerExtra.launch({
             headless: true,
             slowMo: 50,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--window-size=1920,1080',
-            ],
+            args: chromium.args,
+            executablePath: await chromium.executablePath,
         });
 
         const page = await browser.newPage();
