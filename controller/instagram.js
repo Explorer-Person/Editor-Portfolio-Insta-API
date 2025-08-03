@@ -45,6 +45,8 @@ async function login(page, username, password) {
 
     await page.waitForSelector('input[name="username"]', { timeout: 60000 });
 
+    await delay(2000);
+
     for (const char of username) {
         await page.type('input[name="username"]', char);
         await delay(Math.random() * 150);
