@@ -150,7 +150,6 @@ const instaTakeContents = async () => {
         browser = await puppeteer.launch({
             headless: true,
             slowMo: 50,
-            executablePath: process.env.CHROME_BIN || undefined,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
