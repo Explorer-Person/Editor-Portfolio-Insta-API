@@ -356,27 +356,33 @@ const instaTakeContents = async () => {
 
 
 exports.InstaContentSaver = async (req, res, next) => {
-    try {
-        const contents = await instaTakeContents();
-        // const raw = fs.readFileSync(path.join(__dirname, 'video-urls.json'), 'utf-8');
-        // const contents = JSON.parse(raw);
-        let resArr = [];
-        console.log(contents, typeof contents)
-        if (contents.length > 0) {
-            await Content.deleteAll();
-        }
-        for (let i = 0; i < contents.length; i++) {
-            const result = await Content.create(contents[i], i);
-            resArr.push(result);
-        }
+    // Respond immediately to client
+    res.status(202).json({ message: "Instagram scraping started in background." });
 
-        res.status(200).json(resArr)
-    } catch (err) {
-        console.log("something went wrong...", err)
-        res.status(500).json({ message: "something went wrong while saving insta contents" });
-    }
+    // Run the actual job in the background
+    setTimeout(async () => {
+        try {
+            const contents = await instaTakeContents();
 
-}
+            if (Array.isArray(contents) && contents.length > 0) {
+                console.log(`📌 Found posts: ${contents.length}`);
+                await Content.deleteAll();
+
+                const results = [];
+                for (let i = 0; i < contents.length; i++) {
+                    const result = await Content.create(contents[i], i);
+                    results.push(result);
+                }
+
+                console.log(`✅ All media URLs saved: ${results.length}`);
+            } else {
+                console.log("📭 No posts found or invalid content format.");
+            }
+        } catch (err) {
+            console.error("🔥 Background scrape failed:", err);
+        }
+    }, 0);
+};
 
 exports.GetInstaContents = async (req, res, next) => {
     try {
