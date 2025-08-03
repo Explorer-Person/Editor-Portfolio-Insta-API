@@ -22,7 +22,6 @@
 // main();
 
 const Content = require('../model/content')
-const puppeteer = require('puppeteer');
 const puppeteerExtra = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs');
@@ -30,7 +29,7 @@ const path = require('path');
 
 
 
-puppeteer.use(StealthPlugin());
+puppeteerExtra.use(StealthPlugin());
 
 const USERNAME = process.env.IG_USERNAME;
 const PASSWORD = process.env.IG_PASSWORD;
