@@ -152,6 +152,7 @@ const instaTakeContents = async () => {
     try {
         browser = await puppeteerExtra.launch({
             headless: true,
+            slowMo: 50, // Optional: slows down operations for debugging
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
 
