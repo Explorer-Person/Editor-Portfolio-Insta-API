@@ -145,6 +145,7 @@ let mediaCanditates = [];
 
 const instaTakeContents = async () => {
     let browser;
+    console.log('🚀 CHROME_BIN:', process.env.CHROME_BIN);
     try {
         browser = await puppeteerExtra.launch({
             headless: true,
