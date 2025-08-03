@@ -29,11 +29,13 @@
     "mysql2": "^3.14.2",
     "nextjs-cors": "^2.2.0",
     "node-fetch": "^2.7.0",
-    "puppeteer": "^24.15.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "scraper-instagram": "^1.0.17",
     "serve-index": "^1.9.1",
     "stream": "^0.0.3"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.15.0"
   }
 }

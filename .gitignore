@@ -1,4 +1,6 @@
+.cache/
 node_modules/
+*.log
 public/
 .env
 controller/video-urls.json
