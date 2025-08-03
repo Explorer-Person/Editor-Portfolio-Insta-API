@@ -39,6 +39,7 @@ const PROFILE = process.env.IG_PROFILE;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function login(page, username, password) {
+    console.log(page, username, password)
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36');
 
     await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle2' });
