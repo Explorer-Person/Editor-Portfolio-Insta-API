@@ -38,7 +38,11 @@ const content = {
         return rows[0];
     },
 
-    
+    deleteAll: async () =>{
+        const [rows] = await db.execute("DELETE FROM contents");
+        return rows[0];
+    }
+
 };
 
 module.exports = content;

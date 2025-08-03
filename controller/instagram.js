@@ -366,6 +366,9 @@ exports.InstaContentSaver = async (req, res, next) => {
         // const contents = JSON.parse(raw);
         let resArr = [];
         console.log(contents, typeof contents)
+        if(contents.length > 0){
+            await Content.deleteAll();
+        }
         for (let i = 0; i < contents.length; i++) {
             const result = await Content.create(contents[i], i);
             resArr.push(result);
