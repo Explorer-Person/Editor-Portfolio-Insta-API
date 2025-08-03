@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "heroku-postbuild": "echo 'Postbuild skipped.'"
+    "heroku-postbuild": "mkdir -p ./.cache && mv /app/.cache/puppeteer ./.cache"
   },
   "keywords": [],
   "author": "",
@@ -26,12 +26,10 @@
     "mysql2": "^3.14.2",
     "nextjs-cors": "^2.2.0",
     "node-fetch": "^2.7.0",
+    "puppeteer": "^24.15.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "serve-index": "^1.9.1",
     "stream": "^0.0.3"
-  },
-  "devDependencies": {
-    "puppeteer-core": "^24.15.0"
   }
 }

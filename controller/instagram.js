@@ -22,8 +22,8 @@
 // main();
 
 const Content = require('../model/content');
+const puppeteer = require('puppeteer');
 const puppeteerExtra = require('puppeteer-extra');
-const puppeteer = require('puppeteer-core');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs');
 const path = require('path');
@@ -149,7 +149,6 @@ const instaTakeContents = async () => {
     try {
         browser = await puppeteerExtra.launch({
             headless: true,
-            executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
 
