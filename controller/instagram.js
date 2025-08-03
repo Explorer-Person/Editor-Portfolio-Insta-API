@@ -22,13 +22,12 @@
 // main();
 
 const Content = require('../model/content')
-const puppeteer = require('puppeteer-extra');
+const puppeteer = require('puppeteer');
+const puppeteerExtra = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs');
 const path = require('path');
-const cheerio = require('cheerio');
-const axios = require('axios');
-const { timeout } = require('puppeteer');
+
 
 
 puppeteer.use(StealthPlugin());
@@ -147,7 +146,7 @@ let mediaCanditates = [];
 const instaTakeContents = async () => {
     let browser;
     try {
-        browser = await puppeteer.launch({
+        browser = await puppeteerExtra.launch({
             headless: true,
             slowMo: 50,
             args: [
@@ -365,7 +364,7 @@ exports.InstaContentSaver = async (req, res, next) => {
         // const contents = JSON.parse(raw);
         let resArr = [];
         console.log(contents, typeof contents)
-        if(contents.length > 0){
+        if (contents.length > 0) {
             await Content.deleteAll();
         }
         for (let i = 0; i < contents.length; i++) {
