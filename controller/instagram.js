@@ -266,7 +266,6 @@ const instaTakeContents = async () => {
                 `--load-extension=${pathToExtension}`,
                 '--start-maximized',
             ],
-            executablePath: executablePath(),
             defaultViewport: null,
         });
 
