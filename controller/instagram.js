@@ -41,7 +41,8 @@ puppeteerExtra.use(
             id: '2captcha',
             token: process.env.TWOCAPTCHA_API_KEY // your 2captcha key here
         },
-        visualFeedback: true, // optional
+        visualFeedback: true,
+        throwOnError: true,  // optional for debug
     })
 );
 
@@ -125,20 +126,6 @@ async function login(page, username, password) {
     }
 
     await page.click('button[type="submit"]');
-
-
-    // ✅ Solve CAPTCHA immediately after clicking, before navigating
-    if (page.solveRecaptchas) {
-        const { captchas, solved, error } = await page.solveRecaptchas();
-        console.log(captchas)
-        if (error) {
-            console.error('❌ CAPTCHA solve failed:', error);
-        } else if (solved.length > 0) {
-            console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
-        } else {
-            console.log('✅ No CAPTCHA found after login click');
-        }
-    }
 
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
 
@@ -269,12 +256,18 @@ let mediaCanditates = [];
 
 const instaTakeContents = async () => {
     let browser;
+    const pathToExtension = path.join(__dirname, '2captcha-solver');
     console.log('🚀 CHROME_BIN:', process.env.CHROME_BIN);
     try {
         browser = await puppeteerExtra.launch({
-            headless: true,
-            slowMo: 50, // Optional: slows down operations for debugging
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            headless: false,
+            args: [
+                `--disable-extensions-except=${pathToExtension}`,
+                `--load-extension=${pathToExtension}`,
+                '--start-maximized',
+            ],
+            executablePath: executablePath(),
+            defaultViewport: null,
         });
 
         const page = await browser.newPage();
