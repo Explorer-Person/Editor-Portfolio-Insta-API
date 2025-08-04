@@ -39,15 +39,31 @@ const PROFILE = process.env.IG_PROFILE;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function login(page, username, password) {
-    console.log(page, username, password)
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36');
+    console.log('🚀 Starting login with', username);
 
-    await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle2' });
+    await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+    );
 
+    await page.goto('https://www.instagram.com/accounts/login/', {
+        waitUntil: 'networkidle2',
+    });
+
+    // ⏳ Ensure page loaded by checking unique login text or structure
+    const html = await page.content();
+    if (!html.includes('Log in') && !html.includes('input name="username"')) {
+        console.warn('⚠️ Not on the login page. HTML dump start:\n');
+        console.log(html.slice(0, 1000));
+        throw new Error('Login page not loaded correctly.');
+    }
+
+    console.log('✅ Verified login page loaded');
+
+    // 🧠 Wait for inputs to exist
     await page.waitForSelector('input[name="username"]', { timeout: 60000 });
+    await delay(1000);
 
-    await delay(2000);
-
+    // 👨‍💻 Type username slowly
     for (const char of username) {
         await page.type('input[name="username"]', char);
         await delay(Math.random() * 150);
@@ -58,6 +74,7 @@ async function login(page, username, password) {
         await delay(Math.random() * 150);
     }
 
+    // 🔐 Submit form
     await page.click('button[type="submit"]');
 
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
