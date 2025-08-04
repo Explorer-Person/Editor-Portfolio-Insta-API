@@ -40,6 +40,7 @@ const PROFILE = process.env.IG_PROFILE;
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+
 async function login(page, username, password) {
     console.log('🚀 Starting login with', username);
 
@@ -51,21 +52,31 @@ async function login(page, username, password) {
         waitUntil: 'networkidle2',
     });
 
-    // ⏳ Ensure page loaded by checking unique login text or structure
-    const html = await page.content();
-    if (!html.includes('Log in') && !html.includes('input name="username"')) {
-        console.warn('⚠️ Not on the login page. HTML dump start:\n');
-        console.log(html.slice(0, 1000));
-        throw new Error('Login page not loaded correctly.');
+    // ⏳ Check login page loaded correctly
+    const loginHTML = await page.content();
+    const currentURL = page.url();
+
+    console.log('📍 Current URL:', currentURL);
+    console.log('📄 HTML snapshot (login):', loginHTML.slice(0, 1500));
+
+    if (!loginHTML.includes('Log in') && !loginHTML.includes('input name="username"')) {
+        throw new Error('❌ Login page not loaded properly. Check HTML dump above.');
+    }
+
+    // 📝 Save for debug
+    try {
+        fs.writeFileSync('/tmp/login-page.html', loginHTML);
+    } catch (err) {
+        console.warn('⚠️ Could not write login HTML snapshot to file:', err.message);
     }
 
     console.log('✅ Verified login page loaded');
 
-    // 🧠 Wait for inputs to exist
+    // 👀 Wait for inputs
     await page.waitForSelector('input[name="username"]', { timeout: 60000 });
     await delay(1000);
 
-    // 👨‍💻 Type username slowly
+    // ⌨️ Simulate human typing
     for (const char of username) {
         await page.type('input[name="username"]', char);
         await delay(Math.random() * 150);
@@ -81,13 +92,31 @@ async function login(page, username, password) {
 
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
 
-    const htmlHub = await page.content();
-    if (!htmlHub.includes('aria-label="Profile"') && !htmlHub.includes('New post')) {
-        throw new Error('Login may have failed: profile UI not detected.');
+    // ✅ Post-login validation
+    const profileHTML = await page.content();
+
+    // Optional: cookie-based verification
+    const cookies = await page.cookies();
+    const hasSession = cookies.some(c => c.name === 'ds_user_id' || c.name === 'sessionid');
+
+    if (
+        !hasSession ||
+        (!profileHTML.includes('aria-label="Profile"') &&
+            !profileHTML.includes('New post') &&
+            !profileHTML.includes(username))
+    ) {
+        console.log('🧾 HTML snapshot (post-login):', profileHTML.slice(0, 1000));
+        try {
+            fs.writeFileSync('/tmp/post-login.html', profileHTML);
+        } catch (err) {
+            console.warn('⚠️ Could not write post-login snapshot:', err.message);
+        }
+        throw new Error('❌ Login may have failed: profile UI or session cookie not detected.');
     }
 
-    console.log('✅ Logged in');
+    console.log('✅ Logged in successfully!');
 }
+
 
 async function fetchInstagramLinks(page, profile) {
     const targetURL = `https://www.instagram.com/${profile}/`;
