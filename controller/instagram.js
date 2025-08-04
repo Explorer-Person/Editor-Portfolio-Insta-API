@@ -28,6 +28,8 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs');
 const path = require('path');
 
+const chromiumPath = require('puppeteer').executablePath();
+process.env.CHROME_BIN = chromiumPath;
 
 
 puppeteerExtra.use(StealthPlugin());
@@ -79,11 +81,19 @@ async function login(page, username, password) {
 
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
 
+    const htmlHub = await page.content();
+    if (!htmlHub.includes('aria-label="Profile"') && !htmlHub.includes('New post')) {
+        throw new Error('Login may have failed: profile UI not detected.');
+    }
+
     console.log('✅ Logged in');
 }
 
 async function fetchInstagramLinks(page, profile) {
     const targetURL = `https://www.instagram.com/${profile}/`;
+
+    console.log(`profile: ${profile}`);
+    console.log('🚀 CHROME_BIN:', process.env.CHROME_BIN);
 
     await page.goto(targetURL, { waitUntil: 'networkidle2' });
     console.log(`🔍 Navigated to profile: ${profile}`);
