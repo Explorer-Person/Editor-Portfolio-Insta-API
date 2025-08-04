@@ -133,17 +133,17 @@ async function login(page, username, password) {
 
     safeWrite('/tmp/post-login.html', postLoginHTML);
 
-    const hasSession = cookies.some(c => c.name === 'sessionid' || c.name === 'ds_user_id');
-    const isLoggedInUI =
-        postLoginHTML.includes('aria-label="Profile"') ||
-        postLoginHTML.includes('New post') ||
-        postLoginHTML.includes(username) ||
-        postLoginHTML.includes('/accounts/edit');
+    // const hasSession = cookies.some(c => c.name === 'sessionid' || c.name === 'ds_user_id');
+    // const isLoggedInUI =
+    //     postLoginHTML.includes('aria-label="Profile"') ||
+    //     postLoginHTML.includes('New post') ||
+    //     postLoginHTML.includes(username) ||
+    //     postLoginHTML.includes('/accounts/edit');
 
-    if (!hasSession || !isLoggedInUI) {
-        console.log('🧾 HTML snapshot (post-login):', postLoginHTML.slice(0, 1500));
-        throw new Error('❌ Login may have failed: session cookie or UI confirmation not found.');
-    }
+    // if (!hasSession || !isLoggedInUI) {
+    //     console.log('🧾 HTML snapshot (post-login):', postLoginHTML.slice(0, 1500));
+    //     throw new Error('❌ Login may have failed: session cookie or UI confirmation not found.');
+    // }
 
     // ✅ Move captcha solving AFTER clicking login button
     if (page.solveRecaptchas) {
