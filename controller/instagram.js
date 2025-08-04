@@ -41,6 +41,17 @@ const PROFILE = process.env.IG_PROFILE;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 
+exports.debuggingRoute = async (req, res) => {
+    const htmlPath = '/tmp/post-login.html';
+    try {
+        const html = fs.readFileSync(htmlPath, 'utf-8');
+        res.set('Content-Type', 'text/html');
+        res.send(html);
+    } catch (e) {
+        res.status(500).send('HTML file not found.');
+    }
+}
+
 async function login(page, username, password) {
     console.log('🚀 Starting login with', username);
 
