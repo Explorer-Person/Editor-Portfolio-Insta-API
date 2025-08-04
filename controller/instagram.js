@@ -111,18 +111,6 @@ async function login(page, username, password) {
 
     console.log('✅ Verified login page loaded');
 
-    // ✅ Solve reCAPTCHA if available
-    if (page.solveRecaptchas) {
-        const { solved, error } = await page.solveRecaptchas();
-        if (error) {
-            console.error('❌ CAPTCHA solve failed:', error);
-        } else if (solved.length > 0) {
-            console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
-        } else {
-            console.log('✅ No CAPTCHA found');
-        }
-    }
-
     await page.waitForSelector('input[name="username"]', { timeout: 60000 });
     await delay(1000);
 
@@ -139,6 +127,18 @@ async function login(page, username, password) {
     await page.click('button[type="submit"]');
 
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+
+    // ✅ Move captcha solving AFTER clicking login button
+    if (page.solveRecaptchas) {
+        const { captchas, solved, error } = await page.solveRecaptchas();
+        if (error) {
+            console.error('❌ CAPTCHA solve failed:', error);
+        } else if (solved.length > 0) {
+            console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
+        } else {
+            console.log('✅ No CAPTCHA found after login click');
+        }
+    }
 
     const postLoginHTML = await page.content();
     const cookies = await page.cookies();
