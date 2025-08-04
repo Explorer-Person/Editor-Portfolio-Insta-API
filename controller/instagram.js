@@ -126,28 +126,11 @@ async function login(page, username, password) {
 
     await page.click('button[type="submit"]');
 
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
 
-    const postLoginHTML = await page.content();
-    const cookies = await page.cookies();
-
-    safeWrite('/tmp/post-login.html', postLoginHTML);
-
-    // const hasSession = cookies.some(c => c.name === 'sessionid' || c.name === 'ds_user_id');
-    // const isLoggedInUI =
-    //     postLoginHTML.includes('aria-label="Profile"') ||
-    //     postLoginHTML.includes('New post') ||
-    //     postLoginHTML.includes(username) ||
-    //     postLoginHTML.includes('/accounts/edit');
-
-    // if (!hasSession || !isLoggedInUI) {
-    //     console.log('🧾 HTML snapshot (post-login):', postLoginHTML.slice(0, 1500));
-    //     throw new Error('❌ Login may have failed: session cookie or UI confirmation not found.');
-    // }
-
-    // ✅ Move captcha solving AFTER clicking login button
+    // ✅ Solve CAPTCHA immediately after clicking, before navigating
     if (page.solveRecaptchas) {
         const { captchas, solved, error } = await page.solveRecaptchas();
+        console.log(captchas)
         if (error) {
             console.error('❌ CAPTCHA solve failed:', error);
         } else if (solved.length > 0) {
@@ -156,6 +139,27 @@ async function login(page, username, password) {
             console.log('✅ No CAPTCHA found after login click');
         }
     }
+
+    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+
+    const postLoginHTML = await page.content();
+    const cookies = await page.cookies();
+
+    safeWrite('/tmp/post-login.html', postLoginHTML);
+
+    const hasSession = cookies.some(c => c.name === 'sessionid' || c.name === 'ds_user_id');
+    const isLoggedInUI =
+        postLoginHTML.includes('aria-label="Profile"') ||
+        postLoginHTML.includes('New post') ||
+        postLoginHTML.includes(username) ||
+        postLoginHTML.includes('/accounts/edit');
+
+    if (!hasSession || !isLoggedInUI) {
+        console.log('🧾 HTML snapshot (post-login):', postLoginHTML.slice(0, 1500));
+        console.log('❌ Login may have failed: session cookie or UI confirmation not found.');
+    }
+
+
 
     console.log('✅ Login successful with active session!');
 }
