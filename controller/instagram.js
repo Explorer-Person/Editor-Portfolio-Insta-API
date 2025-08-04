@@ -49,17 +49,40 @@ const USERNAME = process.env.IG_USERNAME;
 const PASSWORD = process.env.IG_PASSWORD;
 const PROFILE = process.env.IG_PROFILE;
 
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-
 exports.debuggingRoute = async (req, res) => {
-    const htmlPath = '/tmp/post-login.html';
+    const { filename } = req.params;
+
+    // ✅ Whitelist allowed filenames for security
+    const allowedFiles = ['login-page', 'login-failure', 'post-login'];
+    if (!allowedFiles.includes(filename)) {
+        return res.status(400).send('❌ Invalid debug file requested.');
+    }
+
+    // 🔒 Prevent path traversal
+    const htmlPath = path.join('/tmp', `${filename}.html`);
+
     try {
         const html = fs.readFileSync(htmlPath, 'utf-8');
-        res.set('Content-Type', 'text/html');
+        res.setHeader('Content-Type', 'text/html');
         res.send(html);
     } catch (e) {
-        res.status(500).send('HTML file not found.');
+        console.error(`❌ Failed to read ${htmlPath}:`, e.message);
+        res.status(500).send('⚠️ HTML debug file not found or unreadable.');
+    }
+};
+
+// ⏱️ Simulate human typing delay
+const delay = (ms) => new Promise(res => setTimeout(res, ms));
+const humanDelay = (min = 50, max = 160) =>
+    delay(Math.floor(Math.random() * (max - min + 1)) + min);
+
+
+function safeWrite(filepath, content) {
+    try {
+        fs.writeFileSync(filepath, content);
+        console.log(`💾 Saved snapshot to ${filepath}`);
+    } catch (err) {
+        console.warn(`⚠️ Failed to write ${filepath}:`, err.message);
     }
 }
 
@@ -74,89 +97,69 @@ async function login(page, username, password) {
         waitUntil: 'networkidle2',
     });
 
-    // ⏳ Check login page loaded correctly
-    const loginHTML = await page.content();
     const currentURL = page.url();
-
+    const loginHTML = await page.content();
     console.log('📍 Current URL:', currentURL);
     console.log('📄 HTML snapshot (login):', loginHTML.slice(0, 1500));
 
-    if (error) {
-        console.error('❌ CAPTCHA solve failed:', error);
-    } else if (solved.length > 0) {
-        console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
-    }
+    safeWrite('/tmp/login-page.html', loginHTML);
 
     if (!loginHTML.includes('Log in') && !loginHTML.includes('input name="username"')) {
-        throw new Error('❌ Login page not loaded properly. Check HTML dump above.');
-    }
-
-    // 📝 Save for debug
-    try {
-        fs.writeFileSync('/tmp/login-page.html', loginHTML);
-    } catch (err) {
-        console.warn('⚠️ Could not write login HTML snapshot to file:', err.message);
+        safeWrite('/tmp/login-failure.html', loginHTML);
+        throw new Error('❌ Login page not loaded properly.');
     }
 
     console.log('✅ Verified login page loaded');
 
-    // 🔍 Solve CAPTCHA if found
-    const { captchas, solved, error } = await page.solveRecaptchas();
-    if (captchas.length > 0) {
-        console.log(`🔍 Found ${captchas.length} CAPTCHA(s).`);
+    // ✅ Solve reCAPTCHA if available
+    if (page.solveRecaptchas) {
+        const { solved, error } = await page.solveRecaptchas();
         if (error) {
             console.error('❌ CAPTCHA solve failed:', error);
-        } else {
+        } else if (solved.length > 0) {
             console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
+        } else {
+            console.log('✅ No CAPTCHA found');
         }
-    } else {
-        console.log('✅ No CAPTCHA detected');
     }
 
-    // 👀 Wait for inputs
     await page.waitForSelector('input[name="username"]', { timeout: 60000 });
     await delay(1000);
 
-    // ⌨️ Simulate human typing
     for (const char of username) {
         await page.type('input[name="username"]', char);
-        await delay(Math.random() * 150);
+        await humanDelay();
     }
 
     for (const char of password) {
         await page.type('input[name="password"]', char);
-        await delay(Math.random() * 150);
+        await humanDelay();
     }
 
-    // 🔐 Submit form
     await page.click('button[type="submit"]');
 
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
 
-    // ✅ Post-login validation
-    const profileHTML = await page.content();
-
-    // Optional: cookie-based verification
+    const postLoginHTML = await page.content();
     const cookies = await page.cookies();
-    const hasSession = cookies.some(c => c.name === 'ds_user_id' || c.name === 'sessionid');
 
-    if (
-        !hasSession ||
-        (!profileHTML.includes('aria-label="Profile"') &&
-            !profileHTML.includes('New post') &&
-            !profileHTML.includes(username))
-    ) {
-        console.log('🧾 HTML snapshot (post-login):', profileHTML.slice(0, 1000));
-        try {
-            fs.writeFileSync('/tmp/post-login.html', profileHTML);
-        } catch (err) {
-            console.warn('⚠️ Could not write post-login snapshot:', err.message);
-        }
-        throw new Error('❌ Login may have failed: profile UI or session cookie not detected.');
+    safeWrite('/tmp/post-login.html', postLoginHTML);
+
+    const hasSession = cookies.some(c => c.name === 'sessionid' || c.name === 'ds_user_id');
+    const isLoggedInUI =
+        postLoginHTML.includes('aria-label="Profile"') ||
+        postLoginHTML.includes('New post') ||
+        postLoginHTML.includes(username) ||
+        postLoginHTML.includes('/accounts/edit');
+
+    if (!hasSession || !isLoggedInUI) {
+        console.log('🧾 HTML snapshot (post-login):', postLoginHTML.slice(0, 1500));
+        throw new Error('❌ Login may have failed: session cookie or UI confirmation not found.');
     }
 
-    console.log('✅ Logged in successfully!');
+    console.log('✅ Login successful with active session!');
 }
+
 
 
 async function fetchInstagramLinks(page, profile) {
