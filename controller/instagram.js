@@ -83,9 +83,24 @@ async function login(page, username, password) {
 }
 
 async function fetchInstagramLinks(page, profile) {
-    await page.goto(`https://www.instagram.com/${profile}/`, { waitUntil: 'networkidle2' });
+    const targetURL = `https://www.instagram.com/${profile}/`;
+
+    await page.goto(targetURL, { waitUntil: 'networkidle2' });
     console.log(`🔍 Navigated to profile: ${profile}`);
 
+    const html = await page.content();
+
+    // ✅ Ensure the profile page loaded correctly
+    if (!html.includes('/p/') && !html.includes('/reel/')) {
+        console.warn('⚠️ Profile page might not have loaded posts correctly.');
+        console.log('🔎 HTML preview:\n', html.slice(0, 1000));
+        throw new Error('Instagram profile page not loaded or no posts found.');
+    }
+
+    // Log HTML head for manual checking
+    console.log('🧾 HTML content dump (first 1000 chars):\n', html.slice(0, 1000));
+
+    // 📜 Scroll to load more posts
     const maxScrolls = 30;
     const scrollStep = 300;
 
@@ -100,19 +115,20 @@ async function fetchInstagramLinks(page, profile) {
         if (atBottom) break;
     }
 
-    // Small delay to let React hydrate all <svg> icons
+    // ⏱ Let Instagram render icons (important for detecting reel/carousel)
     await new Promise(res => setTimeout(res, 1500));
+
     const posts = await page.evaluate(() => {
         const anchors = Array.from(document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'));
 
         return anchors.map(a => {
             const href = a.getAttribute('href');
 
-            // Try to extract post type from either <title> or aria-label
+            // Detect type from <title> or aria-label
             const svgTitle = a.querySelector('svg title')?.textContent?.trim() ||
                 a.querySelector('svg')?.getAttribute('aria-label')?.trim();
 
-            let type = 'image'; // default
+            let type = 'image'; // default fallback
             if (svgTitle === 'Klip' || svgTitle === 'Clip') type = 'reel';
             else if (svgTitle === 'Döngü' || svgTitle === 'Carousel') type = 'carousel';
 
@@ -123,6 +139,7 @@ async function fetchInstagramLinks(page, profile) {
     console.log('📌 Found posts:', posts);
     return posts;
 }
+
 
 
 
