@@ -262,9 +262,10 @@ const instaTakeContents = async () => {
         browser = await puppeteerExtra.launch({
             headless: false,
             args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
                 `--disable-extensions-except=${pathToExtension}`,
                 `--load-extension=${pathToExtension}`,
-                '--start-maximized',
             ],
             defaultViewport: null,
         });
