@@ -128,18 +128,6 @@ async function login(page, username, password) {
 
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
 
-    // ✅ Move captcha solving AFTER clicking login button
-    if (page.solveRecaptchas) {
-        const { captchas, solved, error } = await page.solveRecaptchas();
-        if (error) {
-            console.error('❌ CAPTCHA solve failed:', error);
-        } else if (solved.length > 0) {
-            console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
-        } else {
-            console.log('✅ No CAPTCHA found after login click');
-        }
-    }
-
     const postLoginHTML = await page.content();
     const cookies = await page.cookies();
 
@@ -155,6 +143,18 @@ async function login(page, username, password) {
     if (!hasSession || !isLoggedInUI) {
         console.log('🧾 HTML snapshot (post-login):', postLoginHTML.slice(0, 1500));
         throw new Error('❌ Login may have failed: session cookie or UI confirmation not found.');
+    }
+
+    // ✅ Move captcha solving AFTER clicking login button
+    if (page.solveRecaptchas) {
+        const { captchas, solved, error } = await page.solveRecaptchas();
+        if (error) {
+            console.error('❌ CAPTCHA solve failed:', error);
+        } else if (solved.length > 0) {
+            console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
+        } else {
+            console.log('✅ No CAPTCHA found after login click');
+        }
     }
 
     console.log('✅ Login successful with active session!');
