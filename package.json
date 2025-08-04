@@ -28,6 +28,7 @@
     "node-fetch": "^2.7.0",
     "puppeteer": "^24.15.0",
     "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-recaptcha": "^3.6.8",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "serve-index": "^1.9.1",
     "stream": "^0.0.3"

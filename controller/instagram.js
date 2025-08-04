@@ -25,6 +25,7 @@ const Content = require('../model/content');
 const puppeteer = require('puppeteer');
 const puppeteerExtra = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const RecaptchaPlugin = require('puppeteer-extra-plugin-recaptcha');
 const fs = require('fs');
 const path = require('path');
 
@@ -33,6 +34,16 @@ process.env.CHROME_BIN = chromiumPath;
 
 
 puppeteerExtra.use(StealthPlugin());
+
+puppeteerExtra.use(
+    RecaptchaPlugin({
+        provider: {
+            id: '2captcha',
+            token: process.env.TWOCAPTCHA_API_KEY // your 2captcha key here
+        },
+        visualFeedback: true, // optional
+    })
+);
 
 const USERNAME = process.env.IG_USERNAME;
 const PASSWORD = process.env.IG_PASSWORD;
@@ -70,6 +81,12 @@ async function login(page, username, password) {
     console.log('📍 Current URL:', currentURL);
     console.log('📄 HTML snapshot (login):', loginHTML.slice(0, 1500));
 
+    if (error) {
+        console.error('❌ CAPTCHA solve failed:', error);
+    } else if (solved.length > 0) {
+        console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
+    }
+
     if (!loginHTML.includes('Log in') && !loginHTML.includes('input name="username"')) {
         throw new Error('❌ Login page not loaded properly. Check HTML dump above.');
     }
@@ -82,6 +99,19 @@ async function login(page, username, password) {
     }
 
     console.log('✅ Verified login page loaded');
+
+    // 🔍 Solve CAPTCHA if found
+    const { captchas, solved, error } = await page.solveRecaptchas();
+    if (captchas.length > 0) {
+        console.log(`🔍 Found ${captchas.length} CAPTCHA(s).`);
+        if (error) {
+            console.error('❌ CAPTCHA solve failed:', error);
+        } else {
+            console.log(`✅ Solved ${solved.length} CAPTCHA(s)`);
+        }
+    } else {
+        console.log('✅ No CAPTCHA detected');
+    }
 
     // 👀 Wait for inputs
     await page.waitForSelector('input[name="username"]', { timeout: 60000 });
