@@ -276,14 +276,14 @@ let mediaCanditates = [];
 
 const instaTakeContents = async () => {
     let browser;
-    const pathToExtension = path.join(__dirname, '2captcha-solver');
-    console.log('🚀 CHROME_BIN:', process.env.CHROME_BIN, pathToExtension);
     try {
         browser = await puppeteerExtra.launch({
-            headless: 'new',
+            headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: puppeteer.executablePath(),
         });
+
+
+        console.log('✅ Chromium path:', browser.process().spawnfile);
 
         const page = await browser.newPage();
         await login(page, USERNAME, PASSWORD);
