@@ -90,13 +90,19 @@ function safeWrite(filepath, content) {
 async function login(page, username, password) {
     console.log('🚀 Starting login with', username);
 
+    // Set a realistic User-Agent and headers
     await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
     );
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
 
     await page.goto('https://www.instagram.com/accounts/login/', {
         waitUntil: 'networkidle2',
     });
+
+    // 🧩 Solve CAPTCHA if detected
+    const { captchas, solved, error } = await page.solveRecaptchas();
+    console.log('🧩 CAPTCHA status:', { captchas, solved, error });
 
     const currentURL = page.url();
     const loginHTML = await page.content();
@@ -127,7 +133,12 @@ async function login(page, username, password) {
 
     await page.click('button[type="submit"]');
 
-    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+    // Wait for navigation or fallback timeout
+    try {
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+    } catch (err) {
+        console.warn('⚠️ Navigation timeout after login click, continuing anyway...');
+    }
 
     const postLoginHTML = await page.content();
     const cookies = await page.cookies();
@@ -146,10 +157,9 @@ async function login(page, username, password) {
         console.log('❌ Login may have failed: session cookie or UI confirmation not found.');
     }
 
-
-
     console.log('✅ Login successful with active session!');
 }
+
 
 
 
@@ -257,15 +267,12 @@ let mediaCanditates = [];
 const instaTakeContents = async () => {
     let browser;
     const pathToExtension = path.join(__dirname, '2captcha-solver');
-    console.log('🚀 CHROME_BIN:', process.env.CHROME_BIN);
+    console.log('🚀 CHROME_BIN:', process.env.CHROME_BIN, pathToExtension);
     try {
         browser = await puppeteerExtra.launch({
-            headless: 'new', // ✅ Use new headless mode (recommended for Chromium > 112)
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-            ],
-            defaultViewport: null,
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            executablePath: puppeteer.executablePath(),
         });
 
         const page = await browser.newPage();
