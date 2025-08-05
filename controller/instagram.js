@@ -260,12 +260,10 @@ const instaTakeContents = async () => {
     console.log('🚀 CHROME_BIN:', process.env.CHROME_BIN);
     try {
         browser = await puppeteerExtra.launch({
-            headless: false,
+            headless: 'new', // ✅ Use new headless mode (recommended for Chromium > 112)
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                `--disable-extensions-except=${pathToExtension}`,
-                `--load-extension=${pathToExtension}`,
             ],
             defaultViewport: null,
         });
