@@ -90,7 +90,6 @@ function safeWrite(filepath, content) {
 async function login(page, username, password) {
     console.log('🚀 Starting login with', username);
 
-    // Set a realistic User-Agent and headers
     await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
     );
@@ -100,23 +99,12 @@ async function login(page, username, password) {
         waitUntil: 'networkidle2',
     });
 
-    // 🧩 Solve CAPTCHA if detected
-    const { captchas, solved, error } = await page.solveRecaptchas();
-    console.log('🧩 CAPTCHA status:', { captchas, solved, error });
+    // 🧩 1. Solve CAPTCHA before doing anything
+    let result = await page.solveRecaptchas();
+    console.log('🧩 First CAPTCHA solve (before login):', result);
 
-    const currentURL = page.url();
     const loginHTML = await page.content();
-    console.log('📍 Current URL:', currentURL);
-    console.log('📄 HTML snapshot (login):', loginHTML.slice(0, 1500));
-
     safeWrite('/tmp/login-page.html', loginHTML);
-
-    if (!loginHTML.includes('Log in') && !loginHTML.includes('input name="username"')) {
-        safeWrite('/tmp/login-failure.html', loginHTML);
-        throw new Error('❌ Login page not loaded properly.');
-    }
-
-    console.log('✅ Verified login page loaded');
 
     await page.waitForSelector('input[name="username"]', { timeout: 60000 });
     await delay(1000);
@@ -133,32 +121,54 @@ async function login(page, username, password) {
 
     await page.click('button[type="submit"]');
 
-    // Wait for navigation or fallback timeout
+    // 🕵️ Wait for navigation or redirect after login
     try {
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
     } catch (err) {
         console.warn('⚠️ Navigation timeout after login click, continuing anyway...');
     }
 
-    const postLoginHTML = await page.content();
-    const cookies = await page.cookies();
+    // 🧩 2. Solve CAPTCHA again after login click (if redirected)
+    const urlAfterLogin = page.url();
+    const htmlAfterLogin = await page.content();
+    safeWrite('/tmp/post-login.html', htmlAfterLogin);
 
-    safeWrite('/tmp/post-login.html', postLoginHTML);
+    if (
+        urlAfterLogin.includes('/challenge/') ||
+        htmlAfterLogin.includes('captcha') ||
+        htmlAfterLogin.includes('g-recaptcha')
+    ) {
+        console.warn('🛑 Looks like we were redirected to CAPTCHA page after login.');
+
+        // Solve the new challenge
+        result = await page.solveRecaptchas();
+        console.log('🧩 Second CAPTCHA solve (after login):', result);
+
+        // Retry navigation
+        try {
+            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
+        } catch {
+            console.warn('⚠️ Post-CAPTCHA navigation timeout.');
+        }
+    }
+
+    const cookies = await page.cookies();
+    const postLoginHTML = await page.content();
 
     const hasSession = cookies.some(c => c.name === 'sessionid' || c.name === 'ds_user_id');
     const isLoggedInUI =
         postLoginHTML.includes('aria-label="Profile"') ||
         postLoginHTML.includes('New post') ||
-        postLoginHTML.includes(username) ||
-        postLoginHTML.includes('/accounts/edit');
+        postLoginHTML.includes(username);
 
     if (!hasSession || !isLoggedInUI) {
-        console.log('🧾 HTML snapshot (post-login):', postLoginHTML.slice(0, 1500));
-        console.log('❌ Login may have failed: session cookie or UI confirmation not found.');
+        console.warn('❌ Login may have failed: session cookie or UI confirmation not found.');
+        console.log(postLoginHTML.slice(0, 1000));
+    } else {
+        console.log('✅ Login successful with active session!');
     }
-
-    console.log('✅ Login successful with active session!');
 }
+
 
 
 
