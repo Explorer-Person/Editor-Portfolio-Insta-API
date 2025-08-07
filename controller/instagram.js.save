@@ -25,9 +25,9 @@ const Content = require('../model/content');
 const puppeteer = require('puppeteer');
 const puppeteerExtra = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const RecaptchaPlugin = require('puppeteer-extra-plugin-recaptcha');
 const fs = require('fs');
 const path = require('path');
-const Captcha = require('2captcha');
 
 const chromiumPath = require('puppeteer').executablePath();
 process.env.CHROME_BIN = chromiumPath;
@@ -35,73 +35,29 @@ process.env.CHROME_BIN = chromiumPath;
 
 puppeteerExtra.use(StealthPlugin());
 
+puppeteerExtra.use(
+    RecaptchaPlugin({
+        provider: {
+            id: '2captcha',
+            token: process.env.TWOCAPTCHA_API_KEY // your 2captcha key here
+        },
+        visualFeedback: true,
+        throwOnError: true,  // optional for debug
+    })
+);
+
 const USERNAME = process.env.IG_USERNAME;
 const PASSWORD = process.env.IG_PASSWORD;
 const PROFILE = process.env.IG_PROFILE;
 
-
-
-/**
- * Manually solve Google reCAPTCHA using 2captcha
- */
-async function handleInstagramCaptcha(page) {
-    const url = page.url();
-
-    // Look through all frames on the page
-    const frames = page.frames();
-    let sitekey = null;
-
-    for (const frame of frames) {
-        const frameUrl = frame.url();
-
-        if (frameUrl.includes('https://www.google.com/recaptcha/api2/anchor')) {
-            console.log(`🔍 Found reCAPTCHA iframe: ${frameUrl}`);
-            const sitekeyMatch = frameUrl.match(/[?&]k=([^&]+)/);
-            if (sitekeyMatch) {
-                sitekey = sitekeyMatch[1];
-                console.log('🔑 Extracted sitekey:', sitekey);
-                break;
-            }
-        }
-    }
-
-    if (!sitekey) {
-        console.warn('❌ No CAPTCHA sitekey found. Skipping CAPTCHA solve.');
-        return;
-    }
-
-    // Solve with 2Captcha
-    const solver = new Captcha.Solver(process.env.TWOCAPTCHA_API_KEY);
-    let result;
-    try {
-        result = await solver.recaptcha(sitekey, url);
-        console.log('✅ CAPTCHA solved. Token:', result.data);
-    } catch (err) {
-        console.warn('⚠️ CAPTCHA solving failed:', err.message);
-        return;
-    }
-
-    // Inject the token into the DOM
-    await page.evaluate((token) => {
-        const form = document.querySelector('form');
-        if (!form) return;
-        
-        let input = document.createElement('textarea');
-        input.name = 'g-recaptcha-response';
-        input.style.display = 'none';
-        input.value = token;
-        form.appendChild(input);
-    }, result.data);
-
-    console.log('📩 Injected CAPTCHA token into form');
-
-    // Wait and let reCAPTCHA auto-submit or manually submit
-    await page.waitForTimeout(3000);
-}
-
 exports.debuggingRoute = async (req, res) => {
     const { filename } = req.params;
 
+    // ✅ Whitelist allowed filenames for security
+    const allowedFiles = ['login-page', 'login-failure', 'post-login'];
+    if (!allowedFiles.includes(filename)) {
+        return res.status(400).send('❌ Invalid debug file requested.');
+    }
 
     // 🔒 Prevent path traversal
     const htmlPath = path.join('/tmp', `${filename}.html`);
@@ -137,18 +93,21 @@ async function login(page, username, password) {
     await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
     );
-
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
 
     await page.goto('https://www.instagram.com/accounts/login/', {
         waitUntil: 'networkidle2',
-        timeout: 60000,
     });
+
+    // 🧩 1. Solve CAPTCHA before doing anything
+    await page.solveRecaptchas();
+    console.log('🧩 First CAPTCHA solve (before login):', result);
 
     const loginHTML = await page.content();
     safeWrite('/tmp/login-page.html', loginHTML);
 
     await page.waitForSelector('input[name="username"]', { timeout: 60000 });
-
+    await delay(1000);
 
     for (const char of username) {
         await page.type('input[name="username"]', char);
@@ -159,22 +118,6 @@ async function login(page, username, password) {
         await page.type('input[name="password"]', char);
         await humanDelay();
     }
-
-
-    try {
-	  const buttons = await page.$$('button');
-		for (const button of buttons) {
-		  const text = await page.evaluate(el => el.textContent, button);
-		  if (text?.trim() === 'Allow all cookies') {
-		    await button.click();
-		    console.log("✅ Clicked 'Allow all cookies' button");
-		    break;
-		  }
-		}
-	} catch (e) {
-	  console.log("❎ No cookie banner appeared");
-	}
-
 
     await page.click('button[type="submit"]');
 
@@ -190,19 +133,16 @@ async function login(page, username, password) {
     const htmlAfterLogin = await page.content();
     safeWrite('/tmp/post-login.html', htmlAfterLogin);
 
-
-    const isChallenge = htmlAfterLogin.includes('Secure your account') ||
-                    htmlAfterLogin.includes('Help us confirm it’s you') ||
-                    htmlAfterLogin.includes('Suspicious login attempt') ||
-                    htmlAfterLogin.includes('/challenge/') ||
-                    htmlAfterLogin.includes('security_code');
-
-    if (isChallenge) {
+    if (
+        urlAfterLogin.includes('/challenge/') ||
+        htmlAfterLogin.includes('captcha') ||
+        htmlAfterLogin.includes('g-recaptcha')
+    ) {
         console.warn('🛑 Looks like we were redirected to CAPTCHA page after login.');
-         const oneMorePhase = await page.content();
-         safeWrite('/tmp/challenge.html', oneMorePhase)
+
         // Solve the new challenge
-        await handleInstagramCaptcha(page);
+        result = await page.solveRecaptchas();
+        console.log('🧩 Second CAPTCHA solve (after login):', result);
 
         // Retry navigation
         try {
@@ -211,8 +151,6 @@ async function login(page, username, password) {
             console.warn('⚠️ Post-CAPTCHA navigation timeout.');
         }
     }
-
-    await delay(5000);
 
     const cookies = await page.cookies();
     const postLoginHTML = await page.content();
@@ -338,28 +276,16 @@ let mediaCanditates = [];
 
 const instaTakeContents = async () => {
     let browser;
-
     try {
         browser = await puppeteerExtra.launch({
-            headless: true,
-            executablePath: '/usr/bin/chromium-browser',
-            args: [
-		    '--no-sandbox',
-		    '--disable-setuid-sandbox',
-                    `--proxy-server=${process.env.PROXY_URL}`
-		  ],
+            headless: "new",
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
 
 
         console.log('✅ Chromium path:', browser.process().spawnfile);
 
         const page = await browser.newPage();
-
-        await page.authenticate({
-	  username: process.env.PROXY_USERNAME,
-	  password: process.env.PROXY_PASSWORD,
-	});
-
         await login(page, USERNAME, PASSWORD);
 
         const posts = await fetchInstagramLinks(page, PROFILE);

@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "2captcha": "^3.0.5-2",
     "archiver": "^7.0.1",
     "axios": "^1.11.0",
     "body-parser": "^2.2.0",
